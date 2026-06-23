@@ -25,6 +25,13 @@ async function run() {
   try {
     await client.connect();
     const db = client.db("skillswap");
+    const userCollection = db.collection("user");
+
+    app.get("/api/freelancers", async (req, res) => {
+        const query = {role: "freelancer"}
+        const freelancers = await userCollection.find(query).toArray();
+        res.send(freelancers);
+    })
     
     await client.db("admin").command({ ping: 1 });
     console.log(
