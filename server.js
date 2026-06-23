@@ -4,7 +4,7 @@ dns.setServers(["1.1.1.1", "1.0.0.1"]);
 import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
-import { MongoClient, ServerApiVersion } from "mongodb";
+import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
 dotenv.config();
 
 const app = express();
@@ -102,6 +102,33 @@ async function run() {
           .json({ error: "Failed to query the database matrix directory." });
       }
     });
+
+    app.get("/api/tasks/:id", async (req, res)=> {
+      try {
+        const id = req.params.id;
+        const task = await taskCollection.findOne({ _id: new ObjectId(id) });
+        if (!task) {
+          return res.status(404).json({ error: "Task not found" });
+        }
+        res.send(task);
+      } catch (error) {
+        console.error("Backend Error:", error);
+        return res.status(500).json({ error: "Failed to query the database matrix directory." });
+      }
+    })
+    app.get("/api/freelancers/:id", async (req, res)=> {
+      try {
+        const id = req.params.id;
+        const freelancer = await userCollection.findOne({ _id: new ObjectId(id) });
+        if (!freelancer) {
+          return res.status(404).json({ error: "Freelancer not found" });
+        }
+        res.send(freelancer);
+      } catch (error) {
+        console.error("Backend Error:", error);
+        return res.status(500).json({ error: "Failed to query the database matrix directory." });
+      }
+    })
 
     await client.db("admin").command({ ping: 1 });
     console.log(
