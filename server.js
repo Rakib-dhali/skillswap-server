@@ -194,6 +194,102 @@ async function run() {
       }
     })
    
+    // GET proposals by freelancer email (with task details)
+    app.get("/api/proposals/freelancer/:email", async (req, res) => {
+      try {
+        const email = decodeURIComponent(req.params.email);
+        const proposals = await proposalCollection
+          .find({ freelancer_email: email })
+          .sort({ submitted_at: -1 })
+          .toArray();
+
+        // Enrich each proposal with task title and budget
+        const enriched = await Promise.all(
+          proposals.map(async (p) => {
+            let task = null;
+            try {
+              task = await taskCollection.findOne(
+                { _id: new ObjectId(p.task_id) },
+                { projection: { title: 1, budget: 1, category: 1 } }
+              );
+            } catch (_) {}
+            return { ...p, task_title: task?.title || "Unknown Task", task_budget: task?.budget || 0, task_category: task?.category || "" };
+          })
+        );
+
+        res.json(enriched);
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to fetch freelancer proposals." });
+      }
+    });
+
+    // GET proposals received on a client's tasks
+    app.get("/api/proposals/client/:email", async (req, res) => {
+      try {
+        const email = decodeURIComponent(req.params.email);
+
+        // 1. Find all tasks posted by this client
+        const clientTasks = await taskCollection
+          .find({ client_email: email }, { projection: { _id: 1, title: 1, budget: 1, category: 1 } })
+          .toArray();
+
+        if (clientTasks.length === 0) {
+          return res.json([]);
+        }
+
+        // 2. Build a lookup map: taskId -> task info
+        const taskMap = {};
+        const taskIds = clientTasks.map((t) => {
+          taskMap[t._id.toString()] = t;
+          return t._id.toString();
+        });
+
+        // 3. Find all proposals whose task_id is in the set
+        const proposals = await proposalCollection
+          .find({ task_id: { $in: taskIds } })
+          .sort({ submitted_at: -1 })
+          .toArray();
+
+        // 4. Enrich with task details
+        const enriched = proposals.map((p) => {
+          const task = taskMap[p.task_id] || {};
+          return { ...p, task_title: task.title || "Unknown Task", task_budget: task.budget || 0, task_category: task.category || "" };
+        });
+
+        res.json(enriched);
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to fetch client proposals." });
+      }
+    });
+
+    // PATCH proposal status (accept / reject)
+    app.patch("/api/proposals/:id/status", async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { status } = req.body;
+
+        if (!status || !["accepted", "rejected"].includes(status)) {
+          return res.status(400).json({ error: "Status must be 'accepted' or 'rejected'." });
+        }
+
+        const result = await proposalCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).json({ error: "Proposal not found." });
+        }
+
+        res.json({ success: true, modifiedCount: result.modifiedCount });
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to update proposal status." });
+      }
+    });
+
 
     await client.db("admin").command({ ping: 1 });
     console.log(
