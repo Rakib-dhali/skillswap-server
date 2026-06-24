@@ -103,6 +103,39 @@ async function run() {
       }
     });
 
+    app.post("/api/tasks", async (req, res) => {
+      try {
+        const { title, category, budget, description, deadline, client_email, client_name } = req.body;
+        
+        if (!title || !category || !budget || !description) {
+          return res.status(400).json({ error: "Missing required task fields." });
+        }
+
+        const newTask = {
+          title,
+          category,
+          budget: parseFloat(budget),
+          description,
+          deadline: deadline || null,
+          client_email,
+          client: {
+            name: client_name || "Independent Client",
+            location: "International",
+            tasksPosted: 1,
+            hireRate: 100
+          },
+          createdAt: new Date(),
+          status: "open"
+        };
+
+        const result = await taskCollection.insertOne(newTask);
+        res.status(201).json({ success: true, taskId: result.insertedId });
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to create new task." });
+      }
+    });
+
     app.get("/api/tasks/:id", async (req, res)=> {
       try {
         const id = req.params.id;
