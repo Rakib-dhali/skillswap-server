@@ -27,12 +27,26 @@ async function run() {
     const db = client.db("skillswap");
     const userCollection = db.collection("user");
     const taskCollection = db.collection("tasks");
+    const proposalCollection = db.collection("proposals");
 
     app.get("/api/freelancers", async (req, res) => {
       const query = { role: "freelancer" };
       const freelancers = await userCollection.find(query).toArray();
       res.send(freelancers);
     });
+     app.get("/api/freelancers/:id", async (req, res)=> {
+      try {
+        const id = req.params.id;
+        const freelancer = await userCollection.findOne({ _id: new ObjectId(id) });
+        if (!freelancer) {
+          return res.status(404).json({ error: "Freelancer not found" });
+        }
+        res.send(freelancer);
+      } catch (error) {
+        console.error("Backend Error:", error);
+        return res.status(500).json({ error: "Failed to query the database matrix directory." });
+      }
+    })
     app.get("/api/tasks", async (req, res) => {
       try {
         const { search, category, minBudget, sortBy, page } = req.query;
@@ -149,19 +163,37 @@ async function run() {
         return res.status(500).json({ error: "Failed to query the database matrix directory." });
       }
     })
-    app.get("/api/freelancers/:id", async (req, res)=> {
+
+    app.post("/api/proposals", async(req, res)=> {
+      // task_id, freelancer_email, proposed_budget, estimated_days, cover_note, status,submitted_at
+
       try {
-        const id = req.params.id;
-        const freelancer = await userCollection.findOne({ _id: new ObjectId(id) });
-        if (!freelancer) {
-          return res.status(404).json({ error: "Freelancer not found" });
+        const {task_id, freelancer_email,freelancer_name, proposed_budget, estimated_days, cover_note, status="open", submitted_at} = req.body;
+        
+        if (!task_id || !freelancer_email || !proposed_budget || !estimated_days || !cover_note) {
+          return res.status(400).json({ error: "Missing required proposal fields." });
         }
-        res.send(freelancer);
-      } catch (error) {
-        console.error("Backend Error:", error);
-        return res.status(500).json({ error: "Failed to query the database matrix directory." });
+
+        const newProposal = {
+          task_id,
+          freelancer_email,
+          freelancer_name,
+          proposed_budget: parseFloat(proposed_budget),
+          estimated_days: parseInt(estimated_days),
+          cover_note,
+          status: status || "pending",
+          submitted_at: submitted_at || new Date(),
+        };
+
+        const result = await proposalCollection.insertOne(newProposal);
+        res.status(201).json({ success: true, proposalId: result.insertedId });
+      }catch(error){
+        console.log(error);
+        return res.status(500).json({ error: "Failed to submit proposal." });
+        
       }
     })
+   
 
     await client.db("admin").command({ ping: 1 });
     console.log(
