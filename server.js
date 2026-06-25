@@ -651,6 +651,58 @@ async function run() {
       }
     });
 
+    // GET /api/freelancer/activity/:email
+    app.get("/api/freelancer/activity/:email", async (req, res) => {
+      try {
+        const email = decodeURIComponent(req.params.email);
+
+        const [proposals, payments] = await Promise.all([
+          proposalCollection
+            .find({ freelancer_email: email })
+            .sort({ submitted_at: -1 })
+            .limit(8)
+            .toArray(),
+          paymentCollection
+            .find({ freelancer_email: email, payment_status: "complete" })
+            .sort({ paid_at: -1 })
+            .limit(8)
+            .toArray(),
+        ]);
+
+        const events = [];
+
+        proposals.forEach((proposal) => {
+          events.push({
+            id: `proposal-${proposal._id}`,
+            type: "proposal_submitted",
+            title: `Proposal ${proposal.status === "accepted" ? "Accepted" : "Submitted"}`,
+            detail: `Task ${proposal.task_id} — $${proposal.proposed_budget ?? 0}`,
+            timestamp: proposal.submitted_at
+              ? new Date(proposal.submitted_at).toISOString()
+              : new Date().toISOString(),
+          });
+        });
+
+        payments.forEach((payment) => {
+          events.push({
+            id: `payment-${payment._id}`,
+            type: "payment_received",
+            title: `Payment Received: $${payment.amount ?? 0}`,
+            detail: `Task ${payment.task_id || "unknown"}`,
+            timestamp: payment.paid_at
+              ? new Date(payment.paid_at).toISOString()
+              : new Date().toISOString(),
+          });
+        });
+
+        events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        res.json(events.slice(0, 6));
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to load freelancer activity feed." });
+      }
+    });
+
     // GET /api/freelancers/profile/:email
     app.get("/api/freelancers/profile/:email", async (req, res) => {
       try {
