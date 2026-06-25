@@ -123,11 +123,16 @@ async function run() {
     });
     app.get("/api/admin/tasks", async (req, res) => {
       try {
-        const tasks = await taskCollection.find({}).sort({ createdAt: -1 }).toArray();
-        res.json(tasks.map((task) => ({
-          ...task,
-          _id: String(task._id),
-        })));
+        const tasks = await taskCollection
+          .find({})
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.json(
+          tasks.map((task) => ({
+            ...task,
+            _id: String(task._id),
+          })),
+        );
       } catch (error) {
         console.error("Backend Error:", error);
         res.status(500).json({ error: "Failed to retrieve all tasks." });
@@ -136,11 +141,16 @@ async function run() {
 
     app.get("/api/payments", async (req, res) => {
       try {
-        const payments = await paymentCollection.find({}).sort({ paid_at: -1 }).toArray();
-        res.json(payments.map((payment) => ({
-          ...payment,
-          _id: String(payment._id),
-        })));
+        const payments = await paymentCollection
+          .find({})
+          .sort({ paid_at: -1 })
+          .toArray();
+        res.json(
+          payments.map((payment) => ({
+            ...payment,
+            _id: String(payment._id),
+          })),
+        );
       } catch (error) {
         console.error("Backend Error:", error);
         res.status(500).json({ error: "Failed to retrieve payments." });
@@ -149,14 +159,20 @@ async function run() {
 
     app.get("/api/admin/overview", async (req, res) => {
       try {
-        const [totalUsers, totalTasks, activeTasks, payments] = await Promise.all([
-          userCollection.countDocuments({}),
-          taskCollection.countDocuments({}),
-          taskCollection.countDocuments({ status: { $in: ["open", "in progress", "In Progress"] } }),
-          paymentCollection.find({ payment_status: "complete" }).toArray(),
-        ]);
+        const [totalUsers, totalTasks, activeTasks, payments] =
+          await Promise.all([
+            userCollection.countDocuments({}),
+            taskCollection.countDocuments({}),
+            taskCollection.countDocuments({
+              status: { $in: ["open", "in progress", "In Progress"] },
+            }),
+            paymentCollection.find({ payment_status: "complete" }).toArray(),
+          ]);
 
-        const totalRevenue = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+        const totalRevenue = payments.reduce(
+          (sum, payment) => sum + (Number(payment.amount) || 0),
+          0,
+        );
 
         res.json({
           totalUsers,
@@ -256,9 +272,16 @@ async function run() {
             .json({ error: "Missing required proposal fields." });
         }
 
-        const existingProposal = await proposalCollection.findOne({ task_id, freelancer_email });
+        const existingProposal = await proposalCollection.findOne({
+          task_id,
+          freelancer_email,
+        });
         if (existingProposal) {
-           return res.status(400).json({ error: "You have already submitted a proposal for this task." });
+          return res
+            .status(400)
+            .json({
+              error: "You have already submitted a proposal for this task.",
+            });
         }
 
         const newProposal = {
@@ -412,12 +435,22 @@ async function run() {
         const task = await taskCollection.findOne({ _id: new ObjectId(id) });
         if (!task) return res.status(404).json({ error: "Task not found." });
 
-        const acceptedProposal = await proposalCollection.findOne({ task_id: id, status: "accepted" });
+        const acceptedProposal = await proposalCollection.findOne({
+          task_id: id,
+          status: "accepted",
+        });
         if (acceptedProposal) {
-          return res.status(400).json({ error: "Cannot delete task: A proposal has already been approved." });
+          return res
+            .status(400)
+            .json({
+              error:
+                "Cannot delete task: A proposal has already been approved.",
+            });
         }
 
-        const result = await taskCollection.deleteOne({ _id: new ObjectId(id) });
+        const result = await taskCollection.deleteOne({
+          _id: new ObjectId(id),
+        });
         res.json({ success: true, deletedCount: result.deletedCount });
       } catch (error) {
         console.error("Backend Error:", error);
@@ -430,16 +463,20 @@ async function run() {
       try {
         const id = req.params.id;
         const { description } = req.body;
-        
+
         const task = await taskCollection.findOne({ _id: new ObjectId(id) });
         if (!task) return res.status(404).json({ error: "Task not found." });
         if (task.status !== "open") {
-          return res.status(400).json({ error: "Cannot edit task: Live status is no longer Open." });
+          return res
+            .status(400)
+            .json({
+              error: "Cannot edit task: Live status is no longer Open.",
+            });
         }
 
         const result = await taskCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: { description } }
+          { $set: { description } },
         );
         res.json({ success: true, modifiedCount: result.modifiedCount });
       } catch (error) {
@@ -453,10 +490,10 @@ async function run() {
       try {
         const id = req.params.id;
         const { status } = req.body;
-        
+
         const result = await taskCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: { status } }
+          { $set: { status } },
         );
         res.json({ success: true, modifiedCount: result.modifiedCount });
       } catch (error) {
@@ -473,7 +510,7 @@ async function run() {
 
         const result = await taskCollection.updateOne(
           { _id: new ObjectId(id) },
-          { $set: { deliverable_url, status: "Completed" } }
+          { $set: { deliverable_url, status: "Completed" } },
         );
         res.json({ success: true, modifiedCount: result.modifiedCount });
       } catch (error) {
@@ -486,12 +523,18 @@ async function run() {
     app.get("/api/client/stats/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
-        const tasks = await taskCollection.find({ client_email: email }).toArray();
-        const payments = await paymentCollection.find({ client_email: email, payment_status: "complete" }).toArray();
+        const tasks = await taskCollection
+          .find({ client_email: email })
+          .toArray();
+        const payments = await paymentCollection
+          .find({ client_email: email, payment_status: "complete" })
+          .toArray();
 
         const totalTasks = tasks.length;
-        const openTasks = tasks.filter(t => t.status === "open").length;
-        const inProgress = tasks.filter(t => t.status === "In Progress" || t.status === "in progress").length;
+        const openTasks = tasks.filter((t) => t.status === "open").length;
+        const inProgress = tasks.filter(
+          (t) => t.status === "In Progress" || t.status === "in progress",
+        ).length;
         const totalSpent = payments.reduce((sum, p) => sum + p.amount, 0);
 
         res.json({ totalTasks, openTasks, inProgress, totalSpent });
@@ -505,12 +548,20 @@ async function run() {
     app.get("/api/freelancer/stats/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
-        const proposals = await proposalCollection.find({ freelancer_email: email }).toArray();
-        const payments = await paymentCollection.find({ freelancer_email: email, payment_status: "complete" }).toArray();
+        const proposals = await proposalCollection
+          .find({ freelancer_email: email })
+          .toArray();
+        const payments = await paymentCollection
+          .find({ freelancer_email: email, payment_status: "complete" })
+          .toArray();
 
         const totalProposals = proposals.length;
-        const pending = proposals.filter(p => p.status === "pending" || p.status === "open").length;
-        const accepted = proposals.filter(p => p.status === "accepted").length;
+        const pending = proposals.filter(
+          (p) => p.status === "pending" || p.status === "open",
+        ).length;
+        const accepted = proposals.filter(
+          (p) => p.status === "accepted",
+        ).length;
         const totalEarnings = payments.reduce((sum, p) => sum + p.amount, 0);
 
         res.json({ totalProposals, pending, accepted, totalEarnings });
@@ -540,7 +591,7 @@ async function run() {
       try {
         const email = decodeURIComponent(req.params.email);
         const { name, image, skills, bio, hourlyRate } = req.body;
-        
+
         const updateData = {};
         if (name) updateData.name = name;
         if (image) updateData.image = image;
@@ -550,7 +601,7 @@ async function run() {
 
         const result = await userCollection.updateOne(
           { email },
-          { $set: updateData }
+          { $set: updateData },
         );
         res.json({ success: true, modifiedCount: result.modifiedCount });
       } catch (error) {
@@ -576,7 +627,7 @@ async function run() {
               status: "accepted",
             });
             return { ...t, hasAcceptedProposal: !!hasAccepted };
-          })
+          }),
         );
 
         res.json(enriched);
@@ -602,15 +653,16 @@ async function run() {
             try {
               task = await taskCollection.findOne(
                 { _id: new ObjectId(p.task_id) },
-                { projection: { title: 1, client_email: 1, client: 1 } }
+                { projection: { title: 1, client_email: 1, client: 1 } },
               );
             } catch (_) {}
             return {
               ...p,
               task_title: task?.title || "Unknown Task",
-              client_name: task?.client?.name || task?.client_email || "Unknown",
+              client_name:
+                task?.client?.name || task?.client_email || "Unknown",
             };
-          })
+          }),
         );
 
         res.json(enriched);
@@ -624,32 +676,34 @@ async function run() {
     app.get("/api/freelancer/active-projects/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
-        
+
         // Find accepted proposals for this freelancer
         const acceptedProposals = await proposalCollection
           .find({ freelancer_email: email, status: "accepted" })
           .toArray();
-        
+
         // Get the task IDs from accepted proposals
-        const taskIds = acceptedProposals.map(p => p.task_id);
-        
+        const taskIds = acceptedProposals.map((p) => p.task_id);
+
         if (taskIds.length === 0) return res.json([]);
-        
+
         // Fetch the tasks
         const tasks = await taskCollection
-          .find({ _id: { $in: taskIds.map(id => new ObjectId(id)) } })
+          .find({ _id: { $in: taskIds.map((id) => new ObjectId(id)) } })
           .toArray();
-        
+
         // Enrich with proposal info
-        const enriched = tasks.map(t => {
-          const proposal = acceptedProposals.find(p => p.task_id === t._id.toString());
+        const enriched = tasks.map((t) => {
+          const proposal = acceptedProposals.find(
+            (p) => p.task_id === t._id.toString(),
+          );
           return {
             ...t,
             proposed_budget: proposal?.proposed_budget,
             estimated_days: proposal?.estimated_days,
           };
         });
-        
+
         res.json(enriched);
       } catch (error) {
         console.error("Backend Error:", error);
