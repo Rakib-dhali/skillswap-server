@@ -121,6 +121,54 @@ async function run() {
           .json({ error: "Failed to query the database matrix directory." });
       }
     });
+    app.get("/api/admin/tasks", async (req, res) => {
+      try {
+        const tasks = await taskCollection.find({}).sort({ createdAt: -1 }).toArray();
+        res.json(tasks.map((task) => ({
+          ...task,
+          _id: String(task._id),
+        })));
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to retrieve all tasks." });
+      }
+    });
+
+    app.get("/api/payments", async (req, res) => {
+      try {
+        const payments = await paymentCollection.find({}).sort({ paid_at: -1 }).toArray();
+        res.json(payments.map((payment) => ({
+          ...payment,
+          _id: String(payment._id),
+        })));
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to retrieve payments." });
+      }
+    });
+
+    app.get("/api/admin/overview", async (req, res) => {
+      try {
+        const [totalUsers, totalTasks, activeTasks, payments] = await Promise.all([
+          userCollection.countDocuments({}),
+          taskCollection.countDocuments({}),
+          taskCollection.countDocuments({ status: { $in: ["open", "in progress", "In Progress"] } }),
+          paymentCollection.find({ payment_status: "complete" }).toArray(),
+        ]);
+
+        const totalRevenue = payments.reduce((sum, payment) => sum + (Number(payment.amount) || 0), 0);
+
+        res.json({
+          totalUsers,
+          totalTasks,
+          activeTasks,
+          totalRevenue,
+        });
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to load admin overview." });
+      }
+    });
 
     app.post("/api/tasks", async (req, res) => {
       try {
