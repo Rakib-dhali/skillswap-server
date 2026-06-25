@@ -186,6 +186,86 @@ async function run() {
       }
     });
 
+    app.get("/api/admin/activity", async (req, res) => {
+      try {
+        const [tasks, payments, proposals, users] = await Promise.all([
+          taskCollection
+            .find({}, { projection: { title: 1, client_email: 1, budget: 1, createdAt: 1 } })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .toArray(),
+          paymentCollection
+            .find({ payment_status: "complete" }, { projection: { task_id: 1, amount: 1, paid_at: 1 } })
+            .sort({ paid_at: -1 })
+            .limit(5)
+            .toArray(),
+          proposalCollection
+            .find({}, { projection: { task_id: 1, freelancer_name: 1, proposed_budget: 1, submitted_at: 1, status: 1 } })
+            .sort({ submitted_at: -1 })
+            .limit(5)
+            .toArray(),
+          userCollection
+            .find({}, { projection: { name: 1, email: 1, role: 1, createdAt: 1 } })
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .toArray(),
+        ]);
+
+        const events = [];
+
+        tasks.forEach((task) => {
+          events.push({
+            id: `task-${task._id}`,
+            type: "task_created",
+            title: `New Task Created: ${task.title}`,
+            detail: `Client: ${task.client_email || "Unknown"} — Amount: $${task.budget ?? 0}`,
+            timestamp: task.createdAt ? new Date(task.createdAt).toISOString() : new Date().toISOString(),
+          });
+        });
+
+        payments.forEach((payment) => {
+          events.push({
+            id: `payment-${payment._id}`,
+            type: "payment_processed",
+            title: `Payment Processed: $${payment.amount ?? 0}`,
+            detail: `Task ID: ${payment.task_id || "unknown"}`,
+            timestamp: payment.paid_at ? new Date(payment.paid_at).toISOString() : new Date().toISOString(),
+          });
+        });
+
+        proposals.forEach((proposal) => {
+          events.push({
+            id: `proposal-${proposal._id}`,
+            type: "proposal_submitted",
+            title: `Proposal Submitted by ${proposal.freelancer_name || "Unknown"}`,
+            detail: `Task ID: ${proposal.task_id || "unknown"} — Amount: $${proposal.proposed_budget ?? 0}`,
+            timestamp: proposal.submitted_at
+              ? new Date(proposal.submitted_at).toISOString()
+              : new Date().toISOString(),
+          });
+        });
+
+        users.forEach((user) => {
+          events.push({
+            id: `user-${user._id}`,
+            type: "user_registered",
+            title: `New User Registration: ${user.name || user.email || "Unknown"}`,
+            detail: `Role: ${user.role || "client"}`,
+            timestamp: user.createdAt
+              ? new Date(user.createdAt).toISOString()
+              : new Date(new ObjectId(user._id).getTimestamp()).toISOString(),
+          });
+        });
+
+        events.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        res.json(events.slice(0, 6));
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to load admin activity feed." });
+      }
+    });
+
     app.post("/api/tasks", async (req, res) => {
       try {
         const {
