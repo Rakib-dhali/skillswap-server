@@ -506,7 +506,7 @@ app.get("/api/statistics", async (req, res) => {
     });
 
     // GET proposals by freelancer email (with task details)
-    app.get("/api/proposals/freelancer/:email", verifyToken, verifyFreelancer, async (req, res) => {
+    app.get("/api/proposals/freelancer/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
         const proposals = await proposalCollection
@@ -543,7 +543,7 @@ app.get("/api/statistics", async (req, res) => {
     });
 
     // GET proposals received on a client's tasks
-    app.get("/api/proposals/client/:email", verifyToken, verifyClient, async (req, res) => {
+    app.get("/api/proposals/client/:email", async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
 
@@ -962,7 +962,7 @@ app.get("/api/statistics", async (req, res) => {
       }
     });
 
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
