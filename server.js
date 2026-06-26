@@ -598,7 +598,7 @@ async function run() {
     });
 
     // POST payment status
-    app.post("/api/payments", async (req, res) => {
+    app.post("/api/payments",verifyToken, verifyClient, async (req, res) => {
       try {
         const { payment } = req.body;
         const result = await paymentCollection.insertOne(payment);
@@ -610,7 +610,7 @@ async function run() {
     });
 
     // DELETE /api/tasks/:id
-    app.delete("/api/tasks/:id", async (req, res) => {
+    app.delete("/api/tasks/:id",verifyToken, async (req, res) => {
       try {
         const id = req.params.id;
         const task = await taskCollection.findOne({ _id: new ObjectId(id) });
@@ -637,7 +637,7 @@ async function run() {
     });
 
     // PUT /api/tasks/:id
-    app.put("/api/tasks/:id", verifyToken, verifyClient, async (req, res) => {
+    app.put("/api/tasks/:id", verifyToken, async (req, res) => {
       try {
         const id = req.params.id;
         const { description } = req.body;
@@ -662,7 +662,7 @@ async function run() {
     });
 
     // PATCH /api/tasks/:id/status
-    app.patch("/api/tasks/:id/status", async (req, res) => {
+    app.patch("/api/tasks/:id/status",verifyToken, verifyAdmin, async (req, res) => {
       try {
         const id = req.params.id;
         const { status } = req.body;
@@ -679,7 +679,7 @@ async function run() {
     });
 
     // PATCH /api/tasks/:id/deliverable
-    app.patch("/api/tasks/:id/deliverable", async (req, res) => {
+    app.patch("/api/tasks/:id/deliverable", verifyToken, verifyFreelancer, async (req, res) => {
       try {
         const id = req.params.id;
         const { deliverable_url } = req.body;
