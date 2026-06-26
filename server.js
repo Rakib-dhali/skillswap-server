@@ -5,13 +5,18 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import { MongoClient, ServerApiVersion, ObjectId } from "mongodb";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 dotenv.config();
 
 const app = express();
 
 app.use(express.json());
-app.use(cors());
-
+app.use(
+  cors({
+    credentials: true,
+    origin: [process.env.CLIENT_URL],
+  }),
+);
 const uri = process.env.MONGODB_URI;
 
 const client = new MongoClient(uri, {
@@ -21,6 +26,55 @@ const client = new MongoClient(uri, {
     deprecationErrors: true,
   },
 });
+
+const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`))
+
+const verifyToken = async (req, res, next) => {
+  const authHeader = req.headers.authorization;
+
+  if (!authHeader || !authHeader.startsWith("Bearer")) {
+    return res.status(401).json({ msg: "Token not sent" });
+  }
+
+  const token = authHeader.split(" ")[1];
+
+  if (!token) {
+    return res.status(401).json({ msg: "Token not found" });
+  }
+
+  try {
+    const { payload } = await jwtVerify(token, JWKS);
+    console.log("payload", payload)
+    req.user = payload;
+
+    next();
+  } catch (error) {
+    console.log(error);
+    return res.status(403).json({ msg: "Invalid Token" });
+  }
+};
+
+const verifyFreelancer = (req, res, next) => {
+  if(req.user.role !== "freelancer") {
+    return res.status(403).json({ msg: "You are not authorized to perform this action" });
+  }
+  next();
+}
+
+const verifyClient = (req, res, next) => {
+  if(req.user.role !== "client") {
+    return res.status(403).json({ msg: "You are not authorized to perform this action" });
+  }
+  next();
+}
+
+const verifyAdmin = (req, res, next) => {
+  if(req.user.role !== "admin") {
+    return res.status(403).json({ msg: "You are not authorized to perform this action" });
+  }
+  next();
+}
+
 async function run() {
   try {
     await client.connect();
@@ -35,6 +89,11 @@ async function run() {
       const freelancers = await userCollection.find(query).toArray();
       res.send(freelancers);
     });
+    // app.get("/api/top-freelancers", async (req, res) => {
+    //   const freelancers = await userCollection.find({}).limit(3).toArray();
+    //   res.send(freelancers);
+    // });
+
     app.get("/api/freelancers/:id", async (req, res) => {
       try {
         const id = req.params.id;
@@ -121,6 +180,19 @@ async function run() {
           .json({ error: "Failed to query the database matrix directory." });
       }
     });
+    // app.get("/api/featured-task", async (req, res) => {
+    //   try {
+    //     const featuredTasks = await taskCollection
+    //       .aggregate([{ $sample: { size: 3 } }])
+    //       .toArray();
+    //     res.json(featuredTasks);
+    //   } catch (error) {
+    //     console.error("Backend Error:", error);
+    //     res
+    //       .status(500)
+    //       .json({ error: "Failed to query the database matrix directory." });
+    //   }
+    // });
     app.get("/api/admin/tasks", async (req, res) => {
       try {
         const tasks = await taskCollection
@@ -190,22 +262,49 @@ async function run() {
       try {
         const [tasks, payments, proposals, users] = await Promise.all([
           taskCollection
-            .find({}, { projection: { title: 1, client_email: 1, budget: 1, createdAt: 1 } })
+            .find(
+              {},
+              {
+                projection: {
+                  title: 1,
+                  client_email: 1,
+                  budget: 1,
+                  createdAt: 1,
+                },
+              },
+            )
             .sort({ createdAt: -1 })
             .limit(5)
             .toArray(),
           paymentCollection
-            .find({ payment_status: "complete" }, { projection: { task_id: 1, amount: 1, paid_at: 1 } })
+            .find(
+              { payment_status: "complete" },
+              { projection: { task_id: 1, amount: 1, paid_at: 1 } },
+            )
             .sort({ paid_at: -1 })
             .limit(5)
             .toArray(),
           proposalCollection
-            .find({}, { projection: { task_id: 1, freelancer_name: 1, proposed_budget: 1, submitted_at: 1, status: 1 } })
+            .find(
+              {},
+              {
+                projection: {
+                  task_id: 1,
+                  freelancer_name: 1,
+                  proposed_budget: 1,
+                  submitted_at: 1,
+                  status: 1,
+                },
+              },
+            )
             .sort({ submitted_at: -1 })
             .limit(5)
             .toArray(),
           userCollection
-            .find({}, { projection: { name: 1, email: 1, role: 1, createdAt: 1 } })
+            .find(
+              {},
+              { projection: { name: 1, email: 1, role: 1, createdAt: 1 } },
+            )
             .sort({ createdAt: -1 })
             .limit(5)
             .toArray(),
@@ -219,7 +318,9 @@ async function run() {
             type: "task_created",
             title: `New Task Created: ${task.title}`,
             detail: `Client: ${task.client_email || "Unknown"} — Amount: $${task.budget ?? 0}`,
-            timestamp: task.createdAt ? new Date(task.createdAt).toISOString() : new Date().toISOString(),
+            timestamp: task.createdAt
+              ? new Date(task.createdAt).toISOString()
+              : new Date().toISOString(),
           });
         });
 
@@ -229,7 +330,9 @@ async function run() {
             type: "payment_processed",
             title: `Payment Processed: $${payment.amount ?? 0}`,
             detail: `Task ID: ${payment.task_id || "unknown"}`,
-            timestamp: payment.paid_at ? new Date(payment.paid_at).toISOString() : new Date().toISOString(),
+            timestamp: payment.paid_at
+              ? new Date(payment.paid_at).toISOString()
+              : new Date().toISOString(),
           });
         });
 
@@ -266,7 +369,7 @@ async function run() {
       }
     });
 
-    app.post("/api/tasks", async (req, res) => {
+    app.post("/api/tasks",verifyToken, verifyClient, async (req, res) => {
       try {
         const {
           title,
@@ -325,7 +428,7 @@ async function run() {
       }
     });
 
-    app.post("/api/proposals", async (req, res) => {
+    app.post("/api/proposals", verifyToken, verifyFreelancer, async (req, res) => {
       // task_id, freelancer_email, proposed_budget, estimated_days, cover_note, status,submitted_at
 
       try {
@@ -357,11 +460,9 @@ async function run() {
           freelancer_email,
         });
         if (existingProposal) {
-          return res
-            .status(400)
-            .json({
-              error: "You have already submitted a proposal for this task.",
-            });
+          return res.status(400).json({
+            error: "You have already submitted a proposal for this task.",
+          });
         }
 
         const newProposal = {
@@ -384,7 +485,7 @@ async function run() {
     });
 
     // GET proposals by freelancer email (with task details)
-    app.get("/api/proposals/freelancer/:email", async (req, res) => {
+    app.get("/api/proposals/freelancer/:email", verifyToken, verifyFreelancer, async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
         const proposals = await proposalCollection
@@ -421,7 +522,7 @@ async function run() {
     });
 
     // GET proposals received on a client's tasks
-    app.get("/api/proposals/client/:email", async (req, res) => {
+    app.get("/api/proposals/client/:email", verifyToken, verifyClient, async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
 
@@ -469,7 +570,7 @@ async function run() {
     });
 
     // PATCH proposal status (accept / reject)
-    app.patch("/api/proposals/:id/status", async (req, res) => {
+    app.patch("/api/proposals/:id/status", verifyToken, verifyClient, async (req, res) => {
       try {
         const id = req.params.id;
         const { status } = req.body;
@@ -520,12 +621,9 @@ async function run() {
           status: "accepted",
         });
         if (acceptedProposal) {
-          return res
-            .status(400)
-            .json({
-              error:
-                "Cannot delete task: A proposal has already been approved.",
-            });
+          return res.status(400).json({
+            error: "Cannot delete task: A proposal has already been approved.",
+          });
         }
 
         const result = await taskCollection.deleteOne({
@@ -539,7 +637,7 @@ async function run() {
     });
 
     // PUT /api/tasks/:id
-    app.put("/api/tasks/:id", async (req, res) => {
+    app.put("/api/tasks/:id", verifyToken, verifyClient, async (req, res) => {
       try {
         const id = req.params.id;
         const { description } = req.body;
@@ -547,11 +645,9 @@ async function run() {
         const task = await taskCollection.findOne({ _id: new ObjectId(id) });
         if (!task) return res.status(404).json({ error: "Task not found." });
         if (task.status !== "open") {
-          return res
-            .status(400)
-            .json({
-              error: "Cannot edit task: Live status is no longer Open.",
-            });
+          return res.status(400).json({
+            error: "Cannot edit task: Live status is no longer Open.",
+          });
         }
 
         const result = await taskCollection.updateOne(
@@ -699,7 +795,9 @@ async function run() {
         res.json(events.slice(0, 6));
       } catch (error) {
         console.error("Backend Error:", error);
-        res.status(500).json({ error: "Failed to load freelancer activity feed." });
+        res
+          .status(500)
+          .json({ error: "Failed to load freelancer activity feed." });
       }
     });
 
