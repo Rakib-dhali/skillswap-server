@@ -89,10 +89,31 @@ async function run() {
       const freelancers = await userCollection.find(query).toArray();
       res.send(freelancers);
     });
-    // app.get("/api/top-freelancers", async (req, res) => {
-    //   const freelancers = await userCollection.find({}).limit(3).toArray();
-    //   res.send(freelancers);
-    // });
+
+app.get("/api/statistics", async (req, res) => {
+      try {
+        const [totalTasks, totalUsers, payments] =
+          await Promise.all([
+            taskCollection.countDocuments({}),
+            userCollection.countDocuments({}),
+            paymentCollection.find({ payment_status: "complete" }).toArray(),
+          ]);
+
+        const totalRevenue = payments.reduce(
+          (sum, payment) => sum + (Number(payment.amount) || 0),
+          0,
+        );
+
+        res.json({
+          totalUsers,
+          totalTasks,
+          totalRevenue,
+        });
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to load statistics." });
+      }
+    });
 
     app.get("/api/freelancers/:id", async (req, res) => {
       try {
@@ -180,19 +201,19 @@ async function run() {
           .json({ error: "Failed to query the database matrix directory." });
       }
     });
-    // app.get("/api/featured-task", async (req, res) => {
-    //   try {
-    //     const featuredTasks = await taskCollection
-    //       .aggregate([{ $sample: { size: 3 } }])
-    //       .toArray();
-    //     res.json(featuredTasks);
-    //   } catch (error) {
-    //     console.error("Backend Error:", error);
-    //     res
-    //       .status(500)
-    //       .json({ error: "Failed to query the database matrix directory." });
-    //   }
-    // });
+    app.get("/api/featured-task", async (req, res) => {
+      try {
+        const featuredTasks = await taskCollection
+          .aggregate([{ $sample: { size: 6 } }])
+          .toArray();
+        res.json(featuredTasks);
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res
+          .status(500)
+          .json({ error: "Failed to query the database matrix directory." });
+      }
+    });
     app.get("/api/admin/tasks", async (req, res) => {
       try {
         const tasks = await taskCollection
