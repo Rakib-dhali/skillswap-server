@@ -27,7 +27,9 @@ const client = new MongoClient(uri, {
   },
 });
 
-const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`))
+const JWKS = createRemoteJWKSet(
+  new URL(`${process.env.CLIENT_URL}/api/auth/jwks`),
+);
 
 const verifyToken = async (req, res, next) => {
   const authHeader = req.headers.authorization;
@@ -44,7 +46,7 @@ const verifyToken = async (req, res, next) => {
 
   try {
     const { payload } = await jwtVerify(token, JWKS);
-    console.log("payload", payload)
+    console.log("payload", payload);
     req.user = payload;
 
     next();
@@ -55,29 +57,35 @@ const verifyToken = async (req, res, next) => {
 };
 
 const verifyFreelancer = (req, res, next) => {
-  if(req.user.role !== "freelancer") {
-    return res.status(403).json({ msg: "You are not authorized to perform this action" });
+  if (req.user.role !== "freelancer") {
+    return res
+      .status(403)
+      .json({ msg: "You are not authorized to perform this action" });
   }
   next();
-}
+};
 
 const verifyClient = (req, res, next) => {
-  if(req.user.role !== "client") {
-    return res.status(403).json({ msg: "You are not authorized to perform this action" });
+  if (req.user.role !== "client") {
+    return res
+      .status(403)
+      .json({ msg: "You are not authorized to perform this action" });
   }
   next();
-}
+};
 
 const verifyAdmin = (req, res, next) => {
-  if(req.user.role !== "admin") {
-    return res.status(403).json({ msg: "You are not authorized to perform this action" });
+  if (req.user.role !== "admin") {
+    return res
+      .status(403)
+      .json({ msg: "You are not authorized to perform this action" });
   }
   next();
-}
+};
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const db = client.db("skillswap");
     const userCollection = db.collection("user");
     const taskCollection = db.collection("tasks");
@@ -90,14 +98,13 @@ async function run() {
       res.send(freelancers);
     });
 
-app.get("/api/statistics", async (req, res) => {
+    app.get("/api/statistics", async (req, res) => {
       try {
-        const [totalTasks, totalUsers, payments] =
-          await Promise.all([
-            taskCollection.countDocuments({}),
-            userCollection.countDocuments({}),
-            paymentCollection.find({ payment_status: "complete" }).toArray(),
-          ]);
+        const [totalTasks, totalUsers, payments] = await Promise.all([
+          taskCollection.countDocuments({}),
+          userCollection.countDocuments({}),
+          paymentCollection.find({ payment_status: "complete" }).toArray(),
+        ]);
 
         const totalRevenue = payments.reduce(
           (sum, payment) => sum + (Number(payment.amount) || 0),
@@ -390,7 +397,7 @@ app.get("/api/statistics", async (req, res) => {
       }
     });
 
-    app.post("/api/tasks",verifyToken, verifyClient, async (req, res) => {
+    app.post("/api/tasks", verifyToken, verifyClient, async (req, res) => {
       try {
         const {
           title,
@@ -449,61 +456,68 @@ app.get("/api/statistics", async (req, res) => {
       }
     });
 
-    app.post("/api/proposals", verifyToken, verifyFreelancer, async (req, res) => {
-      // task_id, freelancer_email, proposed_budget, estimated_days, cover_note, status,submitted_at
+    app.post(
+      "/api/proposals",
+      verifyToken,
+      verifyFreelancer,
+      async (req, res) => {
+        // task_id, freelancer_email, proposed_budget, estimated_days, cover_note, status,submitted_at
 
-      try {
-        const {
-          task_id,
-          freelancer_email,
-          freelancer_name,
-          proposed_budget,
-          estimated_days,
-          cover_note,
-          status = "open",
-          submitted_at,
-        } = req.body;
+        try {
+          const {
+            task_id,
+            freelancer_email,
+            freelancer_name,
+            proposed_budget,
+            estimated_days,
+            cover_note,
+            status = "open",
+            submitted_at,
+          } = req.body;
 
-        if (
-          !task_id ||
-          !freelancer_email ||
-          !proposed_budget ||
-          !estimated_days ||
-          !cover_note
-        ) {
-          return res
-            .status(400)
-            .json({ error: "Missing required proposal fields." });
-        }
+          if (
+            !task_id ||
+            !freelancer_email ||
+            !proposed_budget ||
+            !estimated_days ||
+            !cover_note
+          ) {
+            return res
+              .status(400)
+              .json({ error: "Missing required proposal fields." });
+          }
 
-        const existingProposal = await proposalCollection.findOne({
-          task_id,
-          freelancer_email,
-        });
-        if (existingProposal) {
-          return res.status(400).json({
-            error: "You have already submitted a proposal for this task.",
+          const existingProposal = await proposalCollection.findOne({
+            task_id,
+            freelancer_email,
           });
+          if (existingProposal) {
+            return res.status(400).json({
+              error: "You have already submitted a proposal for this task.",
+            });
+          }
+
+          const newProposal = {
+            task_id,
+            freelancer_email,
+            freelancer_name,
+            proposed_budget: parseFloat(proposed_budget),
+            estimated_days: parseInt(estimated_days),
+            cover_note,
+            status: status || "pending",
+            submitted_at: submitted_at || new Date(),
+          };
+
+          const result = await proposalCollection.insertOne(newProposal);
+          res
+            .status(201)
+            .json({ success: true, proposalId: result.insertedId });
+        } catch (error) {
+          console.log(error);
+          return res.status(500).json({ error: "Failed to submit proposal." });
         }
-
-        const newProposal = {
-          task_id,
-          freelancer_email,
-          freelancer_name,
-          proposed_budget: parseFloat(proposed_budget),
-          estimated_days: parseInt(estimated_days),
-          cover_note,
-          status: status || "pending",
-          submitted_at: submitted_at || new Date(),
-        };
-
-        const result = await proposalCollection.insertOne(newProposal);
-        res.status(201).json({ success: true, proposalId: result.insertedId });
-      } catch (error) {
-        console.log(error);
-        return res.status(500).json({ error: "Failed to submit proposal." });
-      }
-    });
+      },
+    );
 
     // GET proposals by freelancer email (with task details)
     app.get("/api/proposals/freelancer/:email", async (req, res) => {
@@ -591,35 +605,40 @@ app.get("/api/statistics", async (req, res) => {
     });
 
     // PATCH proposal status (accept / reject)
-    app.patch("/api/proposals/:id/status", verifyToken, verifyClient, async (req, res) => {
-      try {
-        const id = req.params.id;
-        const { status } = req.body;
+    app.patch(
+      "/api/proposals/:id/status",
+      verifyToken,
+      verifyClient,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const { status } = req.body;
 
-        if (!status || !["accepted", "rejected"].includes(status)) {
-          return res
-            .status(400)
-            .json({ error: "Status must be 'accepted' or 'rejected'." });
+          if (!status || !["accepted", "rejected"].includes(status)) {
+            return res
+              .status(400)
+              .json({ error: "Status must be 'accepted' or 'rejected'." });
+          }
+
+          const result = await proposalCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { status } },
+          );
+
+          if (result.matchedCount === 0) {
+            return res.status(404).json({ error: "Proposal not found." });
+          }
+
+          res.json({ success: true, modifiedCount: result.modifiedCount });
+        } catch (error) {
+          console.error("Backend Error:", error);
+          res.status(500).json({ error: "Failed to update proposal status." });
         }
-
-        const result = await proposalCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { status } },
-        );
-
-        if (result.matchedCount === 0) {
-          return res.status(404).json({ error: "Proposal not found." });
-        }
-
-        res.json({ success: true, modifiedCount: result.modifiedCount });
-      } catch (error) {
-        console.error("Backend Error:", error);
-        res.status(500).json({ error: "Failed to update proposal status." });
-      }
-    });
+      },
+    );
 
     // POST payment status
-    app.post("/api/payments",verifyToken, verifyClient, async (req, res) => {
+    app.post("/api/payments", verifyToken, verifyClient, async (req, res) => {
       try {
         const { payment } = req.body;
         const result = await paymentCollection.insertOne(payment);
@@ -631,7 +650,7 @@ app.get("/api/statistics", async (req, res) => {
     });
 
     // DELETE /api/tasks/:id
-    app.delete("/api/tasks/:id",verifyToken, async (req, res) => {
+    app.delete("/api/tasks/:id", verifyToken, async (req, res) => {
       try {
         const id = req.params.id;
         const task = await taskCollection.findOne({ _id: new ObjectId(id) });
@@ -683,38 +702,48 @@ app.get("/api/statistics", async (req, res) => {
     });
 
     // PATCH /api/tasks/:id/status
-    app.patch("/api/tasks/:id/status",verifyToken, verifyAdmin, async (req, res) => {
-      try {
-        const id = req.params.id;
-        const { status } = req.body;
+    app.patch(
+      "/api/tasks/:id/status",
+      verifyToken,
+      verifyAdmin,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const { status } = req.body;
 
-        const result = await taskCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { status } },
-        );
-        res.json({ success: true, modifiedCount: result.modifiedCount });
-      } catch (error) {
-        console.error("Backend Error:", error);
-        res.status(500).json({ error: "Failed to update task status." });
-      }
-    });
+          const result = await taskCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { status } },
+          );
+          res.json({ success: true, modifiedCount: result.modifiedCount });
+        } catch (error) {
+          console.error("Backend Error:", error);
+          res.status(500).json({ error: "Failed to update task status." });
+        }
+      },
+    );
 
     // PATCH /api/tasks/:id/deliverable
-    app.patch("/api/tasks/:id/deliverable", verifyToken, verifyFreelancer, async (req, res) => {
-      try {
-        const id = req.params.id;
-        const { deliverable_url } = req.body;
+    app.patch(
+      "/api/tasks/:id/deliverable",
+      verifyToken,
+      verifyFreelancer,
+      async (req, res) => {
+        try {
+          const id = req.params.id;
+          const { deliverable_url } = req.body;
 
-        const result = await taskCollection.updateOne(
-          { _id: new ObjectId(id) },
-          { $set: { deliverable_url, status: "Completed" } },
-        );
-        res.json({ success: true, modifiedCount: result.modifiedCount });
-      } catch (error) {
-        console.error("Backend Error:", error);
-        res.status(500).json({ error: "Failed to submit deliverable." });
-      }
-    });
+          const result = await taskCollection.updateOne(
+            { _id: new ObjectId(id) },
+            { $set: { deliverable_url, status: "Completed" } },
+          );
+          res.json({ success: true, modifiedCount: result.modifiedCount });
+        } catch (error) {
+          console.error("Backend Error:", error);
+          res.status(500).json({ error: "Failed to submit deliverable." });
+        }
+      },
+    );
 
     // GET /api/client/stats/:email
     app.get("/api/client/stats/:email", async (req, res) => {
