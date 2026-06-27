@@ -85,7 +85,7 @@ const verifyAdmin = (req, res, next) => {
 
 async function run() {
   try {
-    await client.connect();
+    // await client.connect();
     const db = client.db("skillswap");
     const userCollection = db.collection("user");
     const taskCollection = db.collection("tasks");
@@ -1005,7 +1005,7 @@ async function run() {
       }
     });
 
-    await client.db("admin").command({ ping: 1 });
+    // await client.db("admin").command({ ping: 1 });
     console.log(
       "Pinged your deployment. You successfully connected to MongoDB!",
     );
