@@ -629,6 +629,16 @@ async function run() {
             return res.status(404).json({ error: "Proposal not found." });
           }
 
+          if (status === "accepted") {
+            const proposal = await proposalCollection.findOne({ _id: new ObjectId(id) });
+            if (proposal && proposal.task_id) {
+              await taskCollection.updateOne(
+                { _id: new ObjectId(proposal.task_id) },
+                { $set: { status: "In Progress" } },
+              );
+            }
+          }
+
           res.json({ success: true, modifiedCount: result.modifiedCount });
         } catch (error) {
           console.error("Backend Error:", error);
@@ -705,8 +715,12 @@ async function run() {
     app.patch(
       "/api/tasks/:id/status",
       verifyToken,
-      verifyAdmin,
       async (req, res) => {
+        if (req.user.role !== "admin" && req.user.role !== "client") {
+          return res
+            .status(403)
+            .json({ msg: "You are not authorized to perform this action" });
+        }
         try {
           const id = req.params.id;
           const { status } = req.body;
