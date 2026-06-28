@@ -139,7 +139,7 @@ async function run() {
           .json({ error: "Failed to query the database matrix directory." });
       }
     });
-    app.get("/api/tasks", verifyToken, async (req, res) => {
+    app.get("/api/tasks", async (req, res) => {
       try {
         const { search, category, minBudget, sortBy, page } = req.query;
 
