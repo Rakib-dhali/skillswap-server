@@ -407,6 +407,7 @@ async function run() {
           deadline,
           client_email,
           client_name,
+          client_image,
         } = req.body;
 
         if (!title || !category || !budget || !description) {
@@ -427,6 +428,7 @@ async function run() {
             location: "International",
             tasksPosted: 1,
             hireRate: 100,
+            image: client_image,
           },
           createdAt: new Date(),
           status: "open",
