@@ -139,7 +139,7 @@ async function run() {
           .json({ error: "Failed to query the database matrix directory." });
       }
     });
-    app.get("/api/tasks", async (req, res) => {
+    app.get("/api/tasks", verifyToken, async (req, res) => {
       try {
         const { search, category, minBudget, sortBy, page } = req.query;
 
@@ -176,7 +176,7 @@ async function run() {
         }
 
         // 3. Pagination Setup
-        const itemsPerPage = 6;
+        const itemsPerPage = 9;
         const currentPage = parseInt(page) || 1;
         const skipValue = (currentPage - 1) * itemsPerPage;
 
@@ -221,25 +221,7 @@ async function run() {
           .json({ error: "Failed to query the database matrix directory." });
       }
     });
-    app.get("/api/admin/tasks", async (req, res) => {
-      try {
-        const tasks = await taskCollection
-          .find({})
-          .sort({ createdAt: -1 })
-          .toArray();
-        res.json(
-          tasks.map((task) => ({
-            ...task,
-            _id: String(task._id),
-          })),
-        );
-      } catch (error) {
-        console.error("Backend Error:", error);
-        res.status(500).json({ error: "Failed to retrieve all tasks." });
-      }
-    });
-
-    app.get("/api/payments", async (req, res) => {
+     app.get("/api/payments",verifyToken, async (req, res) => {
       try {
         const payments = await paymentCollection
           .find({})
@@ -256,8 +238,24 @@ async function run() {
         res.status(500).json({ error: "Failed to retrieve payments." });
       }
     });
-
-    app.get("/api/admin/overview", async (req, res) => {
+    app.get("/api/admin/tasks", verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const tasks = await taskCollection
+          .find({})
+          .sort({ createdAt: -1 })
+          .toArray();
+        res.json(
+          tasks.map((task) => ({
+            ...task,
+            _id: String(task._id),
+          })),
+        );
+      } catch (error) {
+        console.error("Backend Error:", error);
+        res.status(500).json({ error: "Failed to retrieve all tasks." });
+      }
+    });
+    app.get("/api/admin/overview",verifyToken, verifyAdmin, async (req, res) => {
       try {
         const [totalUsers, totalTasks, activeTasks, payments] =
           await Promise.all([
@@ -285,8 +283,7 @@ async function run() {
         res.status(500).json({ error: "Failed to load admin overview." });
       }
     });
-
-    app.get("/api/admin/activity", async (req, res) => {
+    app.get("/api/admin/activity", verifyToken, verifyAdmin, async (req, res) => {
       try {
         const [tasks, payments, proposals, users] = await Promise.all([
           taskCollection
@@ -458,8 +455,7 @@ async function run() {
       }
     });
 
-    app.post(
-      "/api/proposals",
+    app.post("/api/proposals",
       verifyToken,
       verifyFreelancer,
       async (req, res) => {
@@ -522,7 +518,7 @@ async function run() {
     );
 
     // GET proposals by freelancer email (with task details)
-    app.get("/api/proposals/freelancer/:email", async (req, res) => {
+    app.get("/api/proposals/freelancer/:email", verifyToken, verifyFreelancer, async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
         const proposals = await proposalCollection
@@ -559,7 +555,7 @@ async function run() {
     });
 
     // GET proposals received on a client's tasks
-    app.get("/api/proposals/client/:email", async (req, res) => {
+    app.get("/api/proposals/client/:email",verifyToken, verifyClient, async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
 
@@ -650,7 +646,7 @@ async function run() {
     );
 
     // POST payment status
-    app.post("/api/payments", verifyToken, verifyClient, async (req, res) => {
+    app.post("/api/payments", verifyToken,verifyClient, async (req, res) => {
       try {
         const { payment } = req.body;
         const result = await paymentCollection.insertOne(payment);
@@ -716,7 +712,7 @@ async function run() {
     // PATCH /api/tasks/:id/status
     app.patch(
       "/api/tasks/:id/status",
-      verifyToken,
+      verifyToken, verifyAdmin,
       async (req, res) => {
         if (req.user.role !== "admin" && req.user.role !== "client") {
           return res
@@ -762,7 +758,7 @@ async function run() {
     );
 
     // GET /api/client/stats/:email
-    app.get("/api/client/stats/:email", async (req, res) => {
+    app.get("/api/client/stats/:email",verifyToken, verifyClient, async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
         const tasks = await taskCollection
@@ -868,7 +864,7 @@ async function run() {
     });
 
     // GET /api/freelancers/profile/:email
-    app.get("/api/freelancers/profile/:email", async (req, res) => {
+    app.get("/api/freelancers/profile/:email",verifyToken,verifyFreelancer, async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
         const userDoc = await userCollection.findOne({ email });
@@ -883,7 +879,7 @@ async function run() {
     });
 
     // PATCH /api/freelancers/profile/:email
-    app.patch("/api/freelancers/profile/:email", async (req, res) => {
+    app.patch("/api/freelancers/profile/:email",verifyToken,verifyFreelancer, async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
         const { name, image, skills, bio, hourlyRate } = req.body;
@@ -907,7 +903,7 @@ async function run() {
     });
 
     // GET /api/tasks/client/:email - Fetch all tasks posted by a specific client
-    app.get("/api/tasks/client/:email", async (req, res) => {
+    app.get("/api/tasks/client/:email",verifyToken, verifyClient, async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
         const tasks = await taskCollection
@@ -934,7 +930,7 @@ async function run() {
     });
 
     // GET /api/earnings/freelancer/:email - Fetch completed tasks + payments for a freelancer
-    app.get("/api/earnings/freelancer/:email", async (req, res) => {
+    app.get("/api/earnings/freelancer/:email",verifyToken,verifyFreelancer, async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
         const payments = await paymentCollection
@@ -969,7 +965,7 @@ async function run() {
     });
 
     // GET /api/freelancer/active-projects/:email - Fetch active/completed projects
-    app.get("/api/freelancer/active-projects/:email", async (req, res) => {
+    app.get("/api/freelancer/active-projects/:email",verifyToken,verifyFreelancer, async (req, res) => {
       try {
         const email = decodeURIComponent(req.params.email);
 
